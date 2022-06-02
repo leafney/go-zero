@@ -10,9 +10,13 @@
 !*/
 !api
 
+# ignore
 .idea
 **/.DS_Store
 **/logs
+
+# for test purpose
+adhoc
 
 # gitlab ci
 .cache

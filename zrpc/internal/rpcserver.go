@@ -38,7 +38,7 @@ func NewRpcServer(address string, opts ...ServerOption) Server {
 	}
 
 	return &rpcServer{
-		baseRpcServer: newBaseRpcServer(address, options.metrics),
+		baseRpcServer: newBaseRpcServer(address, &options),
 	}
 }
 
@@ -54,14 +54,17 @@ func (s *rpcServer) Start(register RegisterFn) error {
 	}
 
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
-		serverinterceptors.UnaryTracingInterceptor(s.name),
-		serverinterceptors.UnaryCrashInterceptor(),
+		serverinterceptors.UnaryTracingInterceptor,
+		serverinterceptors.UnaryCrashInterceptor,
 		serverinterceptors.UnaryStatInterceptor(s.metrics),
-		serverinterceptors.UnaryPrometheusInterceptor(),
+		serverinterceptors.UnaryPrometheusInterceptor,
+		serverinterceptors.UnaryBreakerInterceptor,
 	}
 	unaryInterceptors = append(unaryInterceptors, s.unaryInterceptors...)
 	streamInterceptors := []grpc.StreamServerInterceptor{
+		serverinterceptors.StreamTracingInterceptor,
 		serverinterceptors.StreamCrashInterceptor,
+		serverinterceptors.StreamBreakerInterceptor,
 	}
 	streamInterceptors = append(streamInterceptors, s.streamInterceptors...)
 	options := append(s.options, WithUnaryServerInterceptors(unaryInterceptors...),

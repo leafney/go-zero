@@ -16,8 +16,10 @@ var ErrNoRedisNode = errors.New("no redis node")
 type (
 	// Store interface represents a KV store.
 	Store interface {
+		Decr(key string) (int64, error)
+		Decrby(key string, increment int64) (int64, error)
 		Del(keys ...string) (int, error)
-		Eval(script string, key string, args ...interface{}) (interface{}, error)
+		Eval(script, key string, args ...interface{}) (interface{}, error)
 		Exists(key string) (bool, error)
 		Expire(key string, seconds int) error
 		Expireat(key string, expireTime int64) error
@@ -36,10 +38,11 @@ type (
 		Hvals(key string) ([]string, error)
 		Incr(key string) (int64, error)
 		Incrby(key string, increment int64) (int64, error)
+		Lindex(key string, index int64) (string, error)
 		Llen(key string) (int, error)
 		Lpop(key string) (string, error)
 		Lpush(key string, values ...interface{}) (int, error)
-		Lrange(key string, start int, stop int) ([]string, error)
+		Lrange(key string, start, stop int) ([]string, error)
 		Lrem(key string, count int, value string) (int, error)
 		Persist(key string) (bool, error)
 		Pfadd(key string, values ...interface{}) (bool, error)
@@ -47,7 +50,7 @@ type (
 		Rpush(key string, values ...interface{}) (int, error)
 		Sadd(key string, values ...interface{}) (int, error)
 		Scard(key string) (int64, error)
-		Set(key string, value string) error
+		Set(key, value string) error
 		Setex(key, value string, seconds int) error
 		Setnx(key, value string) (bool, error)
 		SetnxEx(key, value string, seconds int) (bool, error)
@@ -74,7 +77,7 @@ type (
 		Zrevrange(key string, start, stop int64) ([]string, error)
 		ZrevrangebyscoreWithScores(key string, start, stop int64) ([]redis.Pair, error)
 		ZrevrangebyscoreWithScoresAndLimit(key string, start, stop int64, page, size int) ([]redis.Pair, error)
-		Zscore(key string, value string) (int64, error)
+		Zscore(key, value string) (int64, error)
 		Zrevrank(key, field string) (int64, error)
 	}
 
@@ -102,6 +105,24 @@ func NewStore(c KvConf) Store {
 	}
 }
 
+func (cs clusterStore) Decr(key string) (int64, error) {
+	node, err := cs.getRedis(key)
+	if err != nil {
+		return 0, err
+	}
+
+	return node.Decr(key)
+}
+
+func (cs clusterStore) Decrby(key string, increment int64) (int64, error) {
+	node, err := cs.getRedis(key)
+	if err != nil {
+		return 0, err
+	}
+
+	return node.Decrby(key, increment)
+}
+
 func (cs clusterStore) Del(keys ...string) (int, error) {
 	var val int
 	var be errorx.BatchError
@@ -123,7 +144,7 @@ func (cs clusterStore) Del(keys ...string) (int, error) {
 	return val, be.Err()
 }
 
-func (cs clusterStore) Eval(script string, key string, args ...interface{}) (interface{}, error) {
+func (cs clusterStore) Eval(script, key string, args ...interface{}) (interface{}, error) {
 	node, err := cs.getRedis(key)
 	if err != nil {
 		return nil, err
@@ -303,6 +324,15 @@ func (cs clusterStore) Llen(key string) (int, error) {
 	return node.Llen(key)
 }
 
+func (cs clusterStore) Lindex(key string, index int64) (string, error) {
+	node, err := cs.getRedis(key)
+	if err != nil {
+		return "", err
+	}
+
+	return node.Lindex(key, index)
+}
+
 func (cs clusterStore) Lpop(key string) (string, error) {
 	node, err := cs.getRedis(key)
 	if err != nil {
@@ -321,7 +351,7 @@ func (cs clusterStore) Lpush(key string, values ...interface{}) (int, error) {
 	return node.Lpush(key, values...)
 }
 
-func (cs clusterStore) Lrange(key string, start int, stop int) ([]string, error) {
+func (cs clusterStore) Lrange(key string, start, stop int) ([]string, error) {
 	node, err := cs.getRedis(key)
 	if err != nil {
 		return nil, err
@@ -393,7 +423,7 @@ func (cs clusterStore) Scard(key string) (int64, error) {
 	return node.Scard(key)
 }
 
-func (cs clusterStore) Set(key string, value string) error {
+func (cs clusterStore) Set(key, value string) error {
 	node, err := cs.getRedis(key)
 	if err != nil {
 		return err
@@ -648,7 +678,7 @@ func (cs clusterStore) Zrevrank(key, field string) (int64, error) {
 	return node.Zrevrank(key, field)
 }
 
-func (cs clusterStore) Zscore(key string, value string) (int64, error) {
+func (cs clusterStore) Zscore(key, value string) (int64, error) {
 	node, err := cs.getRedis(key)
 	if err != nil {
 		return 0, err

@@ -3,12 +3,13 @@ package ast
 import (
 	"fmt"
 	"io/ioutil"
+	"path"
 	"path/filepath"
 	"strings"
 
-	"github.com/antlr/antlr4/runtime/Go/antlr"
 	"github.com/tal-tech/go-zero/tools/goctl/api/parser/g4/gen/api"
 	"github.com/tal-tech/go-zero/tools/goctl/util/console"
+	"github.com/zeromicro/antlr"
 )
 
 type (
@@ -18,6 +19,7 @@ type (
 		debug      bool
 		log        console.Console
 		antlr.DefaultErrorListener
+		src string
 	}
 
 	// ParserOption defines an function with argument Parser
@@ -70,6 +72,12 @@ func (p *Parser) Accept(fn func(p *api.ApiParserParser, visitor *ApiVisitor) int
 
 // Parse is used to parse the api from the specified file name
 func (p *Parser) Parse(filename string) (*Api, error) {
+	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	p.src = abs
 	data, err := p.readContent(filename)
 	if err != nil {
 		return nil, err
@@ -79,8 +87,19 @@ func (p *Parser) Parse(filename string) (*Api, error) {
 }
 
 // ParseContent is used to parse the api from the specified content
-func (p *Parser) ParseContent(content string) (*Api, error) {
-	return p.parse("", content)
+func (p *Parser) ParseContent(content string, filename ...string) (*Api, error) {
+	var f string
+	if len(filename) > 0 {
+		f = filename[0]
+		abs, err := filepath.Abs(f)
+		if err != nil {
+			return nil, err
+		}
+
+		p.src = abs
+	}
+
+	return p.parse(f, content)
 }
 
 // parse is used to parse api from the content
@@ -94,13 +113,14 @@ func (p *Parser) parse(filename, content string) (*Api, error) {
 	var apiAstList []*Api
 	apiAstList = append(apiAstList, root)
 	for _, imp := range root.Import {
-		path := imp.Value.Text()
-		data, err := p.readContent(path)
+		dir := filepath.Dir(p.src)
+		imp := filepath.Join(dir, imp.Value.Text())
+		data, err := p.readContent(imp)
 		if err != nil {
 			return nil, err
 		}
 
-		nestedApi, err := p.invoke(path, data)
+		nestedApi, err := p.invoke(imp, data)
 		if err != nil {
 			return nil, err
 		}
@@ -158,7 +178,7 @@ func (p *Parser) invoke(linePrefix, content string) (v *Api, err error) {
 	return
 }
 
-func (p *Parser) valid(mainApi *Api, nestedApi *Api) error {
+func (p *Parser) valid(mainApi, nestedApi *Api) error {
 	err := p.nestedApiCheck(mainApi, nestedApi)
 	if err != nil {
 		return err
@@ -177,8 +197,8 @@ func (p *Parser) valid(mainApi *Api, nestedApi *Api) error {
 			if handler.IsNotNil() {
 				handlerName := handler.Text()
 				handlerMap[handlerName] = Holder
-				path := fmt.Sprintf("%s://%s", g.Route.Method.Text(), g.Route.Path.Text())
-				routeMap[path] = Holder
+				route := fmt.Sprintf("%s://%s", g.Route.Method.Text(), g.Route.Path.Text())
+				routeMap[route] = Holder
 			}
 		}
 
@@ -218,8 +238,15 @@ func (p *Parser) valid(mainApi *Api, nestedApi *Api) error {
 	return nil
 }
 
-func (p *Parser) duplicateRouteCheck(nestedApi *Api, mainHandlerMap map[string]PlaceHolder, mainRouteMap map[string]PlaceHolder) error {
+func (p *Parser) duplicateRouteCheck(nestedApi *Api, mainHandlerMap, mainRouteMap map[string]PlaceHolder) error {
 	for _, each := range nestedApi.Service {
+		var prefix string
+		if each.AtServer != nil {
+			p := each.AtServer.Kv.Get(prefixKey)
+			if p != nil {
+				prefix = p.Text()
+			}
+		}
 		for _, r := range each.ServiceApi.ServiceRoute {
 			handler := r.GetHandler()
 			if !handler.IsNotNil() {
@@ -231,8 +258,8 @@ func (p *Parser) duplicateRouteCheck(nestedApi *Api, mainHandlerMap map[string]P
 					nestedApi.LinePrefix, handler.Line(), handler.Column(), handler.Text())
 			}
 
-			path := fmt.Sprintf("%s://%s", r.Route.Method.Text(), r.Route.Path.Text())
-			if _, ok := mainRouteMap[path]; ok {
+			p := fmt.Sprintf("%s://%s", r.Route.Method.Text(), path.Join(prefix, r.Route.Path.Text()))
+			if _, ok := mainRouteMap[p]; ok {
 				return fmt.Errorf("%s line %d:%d duplicate route '%s'",
 					nestedApi.LinePrefix, r.Route.Method.Line(), r.Route.Method.Column(), r.Route.Method.Text()+" "+r.Route.Path.Text())
 			}
@@ -241,7 +268,7 @@ func (p *Parser) duplicateRouteCheck(nestedApi *Api, mainHandlerMap map[string]P
 	return nil
 }
 
-func (p *Parser) nestedApiCheck(mainApi *Api, nestedApi *Api) error {
+func (p *Parser) nestedApiCheck(mainApi, nestedApi *Api) error {
 	if len(nestedApi.Import) > 0 {
 		importToken := nestedApi.Import[0].Import
 		return fmt.Errorf("%s line %d:%d the nested api does not support import",
@@ -415,12 +442,7 @@ func (p *Parser) checkType(linePrefix string, types map[string]TypeExpr, expr Da
 
 func (p *Parser) readContent(filename string) (string, error) {
 	filename = strings.ReplaceAll(filename, `"`, "")
-	abs, err := filepath.Abs(filename)
-	if err != nil {
-		return "", err
-	}
-
-	data, err := ioutil.ReadFile(abs)
+	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return "", err
 	}

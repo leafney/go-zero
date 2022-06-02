@@ -29,17 +29,26 @@ type RespValue struct {
 }
 
 // Error writes err into w.
-func Error(w http.ResponseWriter, err error) {
+func Error(w http.ResponseWriter, err error, fns ...func(w http.ResponseWriter, err error)) {
 	lock.RLock()
 	handler := errorHandler
 	lock.RUnlock()
 
 	if handler == nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		if len(fns) > 0 {
+			fns[0](w, err)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
 
-	code, body := errorHandler(err)
+	code, body := handler(err)
+	if body == nil {
+		w.WriteHeader(code)
+		return
+	}
+
 	e, ok := body.(error)
 	if ok {
 		http.Error(w, e.Error(), code)

@@ -29,6 +29,9 @@ type (
 	// SqlConn only stands for raw connections, so Transact method can be called.
 	SqlConn interface {
 		Session
+		// RawDB is for other ORM to operate with, use it with caution.
+		// Notice: don't close it.
+		//RawDB() (*sql.DB, error)
 		Transact(func(session Session) error) error
 	}
 
@@ -57,13 +60,16 @@ type (
 		accept     func(error) bool
 	}
 
+	connProvider func() (*sql.DB, error)
+
 	sessionConn interface {
 		Exec(query string, args ...interface{}) (sql.Result, error)
 		Query(query string, args ...interface{}) (*sql.Rows, error)
 	}
 
 	statement struct {
-		stmt *sql.Stmt
+		query string
+		stmt  *sql.Stmt
 	}
 
 	stmtConn interface {
@@ -151,7 +157,8 @@ func (db *commonSqlConn) Prepare(query string) (stmt StmtSession, err error) {
 		}
 
 		stmt = statement{
-			stmt: st,
+			query: query,
+			stmt:  st,
 		}
 		return nil
 	}, db.acceptable)
@@ -183,6 +190,10 @@ func (db *commonSqlConn) QueryRowsPartial(v interface{}, q string, args ...inter
 	}, q, args...)
 }
 
+func (db *commonSqlConn) RawDB() (*sql.DB, error) {
+	return nil, nil
+}
+
 func (db *commonSqlConn) Transact(fn func(Session) error) error {
 	return db.brk.DoWithAcceptable(func() error {
 		return transact(db, db.beginTx, fn)
@@ -201,6 +212,7 @@ func (db *commonSqlConn) acceptable(err error) bool {
 func (db *commonSqlConn) queryRows(scanner func(*sql.Rows) error, q string, args ...interface{}) error {
 	var qerr error
 	return db.brk.DoWithAcceptable(func() error {
+
 		datasource, err := db.DataSourceResp(q, db.cluster, db.datasource)
 		//logx.Infof("exec DataSourceResp data %v,%v,%v,%v", q, db.cluster, db.datasource, datasource)
 		if err != nil {
@@ -228,29 +240,29 @@ func (s statement) Close() error {
 }
 
 func (s statement) Exec(args ...interface{}) (sql.Result, error) {
-	return execStmt(s.stmt, args...)
+	return execStmt(s.stmt, s.query, args...)
 }
 
 func (s statement) QueryRow(v interface{}, args ...interface{}) error {
 	return queryStmt(s.stmt, func(rows *sql.Rows) error {
 		return unmarshalRow(v, rows, true)
-	}, args...)
+	}, s.query, args...)
 }
 
 func (s statement) QueryRowPartial(v interface{}, args ...interface{}) error {
 	return queryStmt(s.stmt, func(rows *sql.Rows) error {
 		return unmarshalRow(v, rows, false)
-	}, args...)
+	}, s.query, args...)
 }
 
 func (s statement) QueryRows(v interface{}, args ...interface{}) error {
 	return queryStmt(s.stmt, func(rows *sql.Rows) error {
 		return unmarshalRows(v, rows, true)
-	}, args...)
+	}, s.query, args...)
 }
 
 func (s statement) QueryRowsPartial(v interface{}, args ...interface{}) error {
 	return queryStmt(s.stmt, func(rows *sql.Rows) error {
 		return unmarshalRows(v, rows, false)
-	}, args...)
+	}, s.query, args...)
 }

@@ -1,7 +1,8 @@
 package clickhouse
 
+/*
 import (
-	// imports the driver.
+	// imports the driver, don't remove this comment, golint requires.
 	_ "github.com/ClickHouse/clickhouse-go"
 	"github.com/tal-tech/go-zero/core/stores/sqlx"
 )
@@ -12,3 +13,5 @@ const clickHouseDriverName = "clickhouse"
 func New(datasource string, opts ...sqlx.SqlOption) sqlx.SqlConn {
 	return sqlx.NewSqlConn(clickHouseDriverName, datasource, opts...)
 }
+
+*/

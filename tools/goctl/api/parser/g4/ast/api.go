@@ -2,10 +2,13 @@ package ast
 
 import (
 	"fmt"
+	"path"
 	"sort"
 
 	"github.com/tal-tech/go-zero/tools/goctl/api/parser/g4/gen/api"
 )
+
+const prefixKey = "prefix"
 
 // Api describes syntax for api
 type Api struct {
@@ -42,15 +45,22 @@ func (v *ApiVisitor) VisitApi(ctx *api.ApiContext) interface{} {
 	return &final
 }
 
-func (v *ApiVisitor) acceptService(root *Api, final *Api) {
+func (v *ApiVisitor) acceptService(root, final *Api) {
 	for _, service := range root.Service {
 		if _, ok := final.serviceM[service.ServiceApi.Name.Text()]; !ok && len(final.serviceM) > 0 {
-			v.panic(service.ServiceApi.Name, fmt.Sprintf("mutiple service declaration"))
+			v.panic(service.ServiceApi.Name, "multiple service declaration")
 		}
 		v.duplicateServerItemCheck(service)
 
+		var prefix string
+		if service.AtServer != nil {
+			p := service.AtServer.Kv.Get(prefixKey)
+			if p != nil {
+				prefix = p.Text()
+			}
+		}
 		for _, route := range service.ServiceApi.ServiceRoute {
-			uniqueRoute := fmt.Sprintf("%s %s", route.Route.Method.Text(), route.Route.Path.Text())
+			uniqueRoute := fmt.Sprintf("%s %s", route.Route.Method.Text(), path.Join(prefix, route.Route.Path.Text()))
 			if _, ok := final.routeM[uniqueRoute]; ok {
 				v.panic(route.Route.Method, fmt.Sprintf("duplicate route '%s'", uniqueRoute))
 			}
@@ -75,11 +85,11 @@ func (v *ApiVisitor) acceptService(root *Api, final *Api) {
 			}
 
 			if handlerExpr == nil {
-				v.panic(route.Route.Method, fmt.Sprintf("mismtached handler"))
+				v.panic(route.Route.Method, "mismatched handler")
 			}
 
 			if handlerExpr.Text() == "" {
-				v.panic(handlerExpr, fmt.Sprintf("mismtached handler"))
+				v.panic(handlerExpr, "mismatched handler")
 			}
 
 			if _, ok := final.handlerM[handlerExpr.Text()]; ok {
@@ -104,7 +114,7 @@ func (v *ApiVisitor) duplicateServerItemCheck(service *Service) {
 	}
 }
 
-func (v *ApiVisitor) acceptType(root *Api, final *Api) {
+func (v *ApiVisitor) acceptType(root, final *Api) {
 	for _, tp := range root.Type {
 		if _, ok := final.typeM[tp.NameExpr().Text()]; ok {
 			v.panic(tp.NameExpr(), fmt.Sprintf("duplicate type '%s'", tp.NameExpr().Text()))
@@ -115,11 +125,11 @@ func (v *ApiVisitor) acceptType(root *Api, final *Api) {
 	}
 }
 
-func (v *ApiVisitor) acceptInfo(root *Api, final *Api) {
+func (v *ApiVisitor) acceptInfo(root, final *Api) {
 	if root.Info != nil {
 		infoM := map[string]PlaceHolder{}
 		if final.Info != nil {
-			v.panic(root.Info.Info, fmt.Sprintf("mutiple info declaration"))
+			v.panic(root.Info.Info, "multiple info declaration")
 		}
 
 		for _, value := range root.Info.Kvs {
@@ -133,7 +143,7 @@ func (v *ApiVisitor) acceptInfo(root *Api, final *Api) {
 	}
 }
 
-func (v *ApiVisitor) acceptImport(root *Api, final *Api) {
+func (v *ApiVisitor) acceptImport(root, final *Api) {
 	for _, imp := range root.Import {
 		if _, ok := final.importM[imp.Value.Text()]; ok {
 			v.panic(imp.Import, fmt.Sprintf("duplicate import '%s'", imp.Value.Text()))
@@ -144,10 +154,10 @@ func (v *ApiVisitor) acceptImport(root *Api, final *Api) {
 	}
 }
 
-func (v *ApiVisitor) acceptSyntax(root *Api, final *Api) {
+func (v *ApiVisitor) acceptSyntax(root, final *Api) {
 	if root.Syntax != nil {
 		if final.Syntax != nil {
-			v.panic(root.Syntax.Syntax, fmt.Sprintf("mutiple syntax declaration"))
+			v.panic(root.Syntax.Syntax, "multiple syntax declaration")
 		}
 
 		final.Syntax = root.Syntax

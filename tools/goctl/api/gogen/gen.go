@@ -30,7 +30,18 @@ func GoCommand(c *cli.Context) error {
 	apiFile := c.String("api")
 	dir := c.String("dir")
 	namingStyle := c.String("style")
+	home := c.String("home")
+	remote := c.String("remote")
+	if len(remote) > 0 {
+		repo, _ := util.CloneIntoGitHome(remote)
+		if len(repo) > 0 {
+			home = repo
+		}
+	}
 
+	if len(home) > 0 {
+		util.RegisterGoctlHome(home)
+	}
 	if len(apiFile) == 0 {
 		return errors.New("missing -api")
 	}
@@ -54,14 +65,19 @@ func DoGenProject(apiFile, dir, style string) error {
 	}
 
 	logx.Must(util.MkdirIfNotExist(dir))
+	rootPkg, err := getParentPackage(dir)
+	if err != nil {
+		return err
+	}
+
 	logx.Must(genEtc(dir, cfg, api))
 	logx.Must(genConfig(dir, cfg, api))
-	logx.Must(genMain(dir, cfg, api))
-	logx.Must(genServiceContext(dir, cfg, api))
+	logx.Must(genMain(dir, rootPkg, cfg, api))
+	logx.Must(genServiceContext(dir, rootPkg, cfg, api))
 	logx.Must(genTypes(dir, cfg, api))
-	logx.Must(genRoutes(dir, cfg, api))
-	logx.Must(genHandlers(dir, cfg, api))
-	logx.Must(genLogic(dir, cfg, api))
+	logx.Must(genRoutes(dir, rootPkg, cfg, api))
+	logx.Must(genHandlers(dir, rootPkg, cfg, api))
+	logx.Must(genLogic(dir, rootPkg, cfg, api))
 	logx.Must(genMiddleware(dir, cfg, api))
 
 	if err := backupAndSweep(apiFile); err != nil {
