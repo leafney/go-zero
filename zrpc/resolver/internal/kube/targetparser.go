@@ -2,6 +2,7 @@ package kube
 
 import (
 	"fmt"
+	"github.com/tal-tech/go-zero/zrpc/resolver/internal/targets"
 	"strconv"
 	"strings"
 
@@ -25,14 +26,15 @@ type Service struct {
 // ParseTarget parses the resolver.Target.
 func ParseTarget(target resolver.Target) (Service, error) {
 	var service Service
-	service.Namespace = target.Authority
+	service.Namespace = targets.GetAuthority(target)
 	if len(service.Namespace) == 0 {
 		service.Namespace = defaultNamespace
 	}
 
-	segs := strings.SplitN(target.Endpoint, colon, 2)
+	endpoints := targets.GetEndpoints(target)
+	segs := strings.SplitN(endpoints, colon, 2)
 	if len(segs) < 2 {
-		return emptyService, fmt.Errorf("bad endpoint: %s", target.Endpoint)
+		return emptyService, fmt.Errorf("bad endpoint: %s", endpoints)
 	}
 
 	service.Name = segs[0]

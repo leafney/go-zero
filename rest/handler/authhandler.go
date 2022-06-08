@@ -75,7 +75,7 @@ func Authorize(secret string, opts ...AuthorizeOption) func(http.Handler) http.H
 				case jwtAudience, jwtExpire, jwtId, jwtIssueAt, jwtIssuer, jwtNotBefore, jwtSubject:
 					// ignore the standard claims
 				default:
-					ctx = context.WithValue(ctx, k, v)
+					ctx = context.WithValue(ctx, ck, v)
 				}
 			}
 

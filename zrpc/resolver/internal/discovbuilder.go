@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"github.com/tal-tech/go-zero/zrpc/resolver/internal/targets"
 	"strings"
 
 	"github.com/tal-tech/go-zero/core/discov"
@@ -12,10 +13,10 @@ type discovBuilder struct{}
 
 func (b *discovBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (
 	resolver.Resolver, error) {
-	hosts := strings.FieldsFunc(target.Authority, func(r rune) bool {
+	hosts := strings.FieldsFunc(targets.GetAuthority(target), func(r rune) bool {
 		return r == EndpointSepChar
 	})
-	sub, err := discov.NewSubscriber(hosts, target.Endpoint)
+	sub, err := discov.NewSubscriber(hosts, targets.GetEndpoints(target))
 	if err != nil {
 		return nil, err
 	}
