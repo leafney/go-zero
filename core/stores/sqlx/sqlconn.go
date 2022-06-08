@@ -60,7 +60,7 @@ type (
 		accept     func(error) bool
 	}
 
-	connProvider func() (*sql.DB, error)
+	//connProvider func() (*sql.DB, error)
 
 	sessionConn interface {
 		Exec(query string, args ...interface{}) (sql.Result, error)
@@ -190,9 +190,9 @@ func (db *commonSqlConn) QueryRowsPartial(v interface{}, q string, args ...inter
 	}, q, args...)
 }
 
-func (db *commonSqlConn) RawDB() (*sql.DB, error) {
-	return nil, nil
-}
+//func (db *commonSqlConn) RawDB() (*sql.DB, error) {
+//	return nil, nil
+//}
 
 func (db *commonSqlConn) Transact(fn func(Session) error) error {
 	return db.brk.DoWithAcceptable(func() error {
